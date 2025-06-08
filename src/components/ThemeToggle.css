@@ -1,0 +1,64 @@
+/* src/components/ThemeToggle.css */
+.theme-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 20px;
+    transition: all 0.3s ease;
+    outline: none;
+  }
+  
+  .theme-toggle:hover {
+    transform: scale(1.05);
+  }
+  
+  .theme-toggle:focus {
+    box-shadow: 0 0 0 2px var(--color-primary-alpha);
+  }
+  
+  .theme-toggle-track {
+    width: 50px;
+    height: 26px;
+    background: var(--color-border);
+    border-radius: 13px;
+    position: relative;
+    transition: all 0.3s ease;
+    border: 1px solid var(--color-border-strong);
+  }
+  
+  .theme-toggle-thumb {
+    width: 22px;
+    height: 22px;
+    background: var(--color-bg-primary);
+    border-radius: 50%;
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--color-border);
+  }
+  
+  .theme-icon {
+    font-size: 12px;
+    line-height: 1;
+  }
+  
+  /* Dark mode positioning */
+  [data-theme="dark"] .theme-toggle-thumb {
+    transform: translateX(24px);
+  }
+  
+  /* Hover effects */
+  .theme-toggle:hover .theme-toggle-track {
+    background: var(--color-border-strong);
+  }
+  
+  .theme-toggle:hover .theme-toggle-thumb {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+  
