@@ -14,8 +14,6 @@ const Sidebar = ({
   setSelectedModel,
   setCurrentSessionId,
   currentSessionId,
-  selectedDocumentIds,
-  setSelectedDocumentIds,
   collapsed,
   setCollapsed,
   width,
@@ -24,11 +22,7 @@ const Sidebar = ({
 }) => {
   const { user, logout, isAdmin } = useAuth();
   const [chatHistory, setChatHistory] = useState([]);
-  const [documents, setDocuments] = useState([]);
-  const [isLoadingDocs, setIsLoadingDocs] = useState(false);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showDocumentManager, setShowDocumentManager] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -92,27 +86,6 @@ const Sidebar = ({
     fetchChatHistory();
   }, [currentSessionId]);
 
-  useEffect(() => {
-    fetchDocuments();
-  }, [sidebarSection]);
-
-  const fetchDocuments = async () => {
-    setIsLoadingDocs(true);
-    try {
-      const response = await axios.get('http://localhost:8000/documents');
-      if (response.data.documents) {
-        setDocuments(response.data.documents);
-      } else {
-        setDocuments(response.data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching documents:', error);
-      setDocuments([]);
-    } finally {
-      setIsLoadingDocs(false);
-    }
-  };
-
   const handleNewChat = () => {
     setCurrentView('chat');
     setSidebarSection('chats');
@@ -144,77 +117,6 @@ const Sidebar = ({
     }
   };
 
-  const handleDeleteDocument = async (documentId, e) => {
-    e.stopPropagation();
-
-    if (!isAdmin()) {
-      alert('Only administrators can delete documents.');
-      return;
-    }
-
-    if (!confirm('Are you sure you want to delete this admin document? This will remove it for all users.')) {
-      return;
-    }
-
-    try {
-      await axios.delete(`http://localhost:8000/documents/${documentId}`);
-      setDocuments((prev) => prev.filter((doc) => doc.id !== documentId));
-      setSelectedDocumentIds((prev) => prev.filter((id) => id !== documentId));
-      alert('Admin document deleted successfully.');
-    } catch (error) {
-      console.error('Error deleting document:', error);
-      alert('Failed to delete document. Please try again.');
-    }
-  };
-
-  const handleDocumentUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    if (!isAdmin()) {
-      alert('Only administrators can upload documents to the shared library.');
-      return;
-    }
-
-    const allowedTypes = [
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain',
-    ];
-    if (!allowedTypes.includes(file.type)) {
-      alert('Please upload a PDF, Word document, or text file.');
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadProgress(0);
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      await axios.post('http://localhost:8000/upload-document', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(percentCompleted);
-        },
-      });
-
-      fetchDocuments();
-      alert(`Admin document "${file.name}" uploaded successfully! It's now available for all users.`);
-    } catch (error) {
-      console.error('Document upload error:', error);
-      alert(`Failed to upload document: ${error.response?.data?.detail || error.message}`);
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-      event.target.value = '';
-    }
-  };
-
   const loadSession = async (sessionId) => {
     try {
       const response = await axios.get(`http://localhost:8000/sessions/${sessionId}`);
@@ -230,35 +132,9 @@ const Sidebar = ({
     }
   };
 
-  const handleDocumentToggle = (documentId) => {
-    setSelectedDocumentIds((prev) => {
-      if (prev.includes(documentId)) {
-        return prev.filter((id) => id !== documentId);
-      } else {
-        return [...prev, documentId];
-      }
-    });
-  };
-
-  const handleSelectAllDocuments = () => {
-    if (selectedDocumentIds.length === documents.length) {
-      setSelectedDocumentIds([]);
-    } else {
-      setSelectedDocumentIds(documents.map((doc) => doc.id));
-    }
-  };
-
   const handleLogout = () => {
     setShowProfileDropdown(false);
     logout();
-  };
-
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   const formatDate = (dateString) => {
@@ -273,13 +149,6 @@ const Sidebar = ({
     } catch {
       return 'Unknown date';
     }
-  };
-
-  const getFileIcon = (fileType) => {
-    if (fileType.includes('pdf')) return '📄';
-    if (fileType.includes('word') || fileType.includes('document')) return '📝';
-    if (fileType.includes('text')) return '📄';
-    return '📁';
   };
 
   return (
@@ -349,182 +218,20 @@ const Sidebar = ({
                 <span className="nav-icon">💬</span>
                 New Chat
               </div>
-              <div
-                className={`nav-item ${sidebarSection === 'documents' ? 'active' : ''}`}
-                onClick={() => setSidebarSection('documents')}
-              >
-                <span className="nav-icon">📄</span>
-                Admin Documents
-                {documents.length > 0 && <span className="count-badge">{documents.length}</span>}
-              </div>
+              
+              {/* Admin Document Management - Only for admins */}
+              {isAdmin() && (
+                <div
+                  className="nav-item"
+                  onClick={() => setShowDocumentManager(true)}
+                >
+                  <span className="nav-icon">📁</span>
+                  Manage Documents
+                </div>
+              )}
             </div>
 
             <div className="scrollable-content">
-              {/* Documents Section */}
-              {sidebarSection === 'documents' && (
-                <div className="documents-section">
-                  <div className="section-header">
-                    <h4>
-                      {isAdmin() ? 'ADMIN DOCUMENTS' : 'AVAILABLE DOCUMENTS'}
-                      <span className="section-subtitle">
-                        {isAdmin() ? '(Manage shared documents)' : '(Read-only access)'}
-                      </span>
-                    </h4>
-                    <div className="document-controls">
-                      {isAdmin() && (
-                        <>
-                          <input
-                            type="file"
-                            id="document-upload"
-                            style={{ display: 'none' }}
-                            accept=".pdf,.doc,.docx,.txt"
-                            onChange={handleDocumentUpload}
-                            disabled={isUploading}
-                          />
-                          
-                          <button
-                            className="manage-btn"
-                            onClick={() => setShowDocumentManager(true)}
-                            title="Manage Documents & Folders"
-                          >
-                            📁
-                          </button>
-                        </>
-                      )}
-                      <button
-                        className="refresh-btn"
-                        onClick={fetchDocuments}
-                        disabled={isLoadingDocs}
-                        title="Refresh documents"
-                      >
-                        {isLoadingDocs ? '⏳' : '🔄'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Document Manager Modal */}
-                  {showDocumentManager && (
-                    <DocumentManager
-                      onDocumentSelect={handleDocumentToggle}
-                      selectedDocumentIds={selectedDocumentIds}
-                      onClose={() => setShowDocumentManager(false)}
-                      isAdmin={isAdmin()}
-                    />
-                  )}
-
-                  {isUploading && (
-                    <div className="upload-progress">
-                      <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: `${uploadProgress}%` }}></div>
-                      </div>
-                      <span>Uploading admin document... {uploadProgress}%</span>
-                    </div>
-                  )}
-
-                  <div className="document-types-info">
-                    <div className="info-card">
-                      <h5>📚 Admin Documents</h5>
-                      <p>
-                        {isAdmin() 
-                          ? 'Shared knowledge base for all users. You can upload, manage, and delete these documents.'
-                          : 'Shared knowledge base. You can select and query these documents but cannot modify them.'
-                        }
-                      </p>
-                    </div>
-                  </div>
-
-                  {documents.length > 0 && (
-                    <div className="rag-controls">
-                      <div className="rag-status">
-                        <span className="rag-indicator">
-                          {selectedDocumentIds.length > 0 ? '🔍' : '💭'}
-                        </span>
-                        <span className="rag-text">
-                          {selectedDocumentIds.length > 0 
-                            ? `Admin RAG Mode: ${selectedDocumentIds.length} selected`
-                            : 'General Chat Mode'
-                          }
-                        </span>
-                      </div>
-                      <button
-                        className="select-all-btn"
-                        onClick={handleSelectAllDocuments}
-                        title={selectedDocumentIds.length === documents.length ? 'Deselect all' : 'Select all'}
-                      >
-                        {selectedDocumentIds.length === documents.length ? '☑️' : '☐'}
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="documents-list">
-                    {isLoadingDocs ? (
-                      <div className="loading-state">
-                        <p>Loading admin documents...</p>
-                      </div>
-                    ) : documents.length === 0 ? (
-                      <div className="no-items">
-                        <p>No admin documents available</p>
-                        <small>
-                          {isAdmin() 
-                            ? 'Upload documents above to make them available for all users'
-                            : 'Ask an administrator to upload documents for RAG functionality'
-                          }
-                        </small>
-                      </div>
-                    ) : (
-                      documents.map((doc) => (
-                        <div key={doc.id} className="document-item">
-                          <div className="doc-checkbox">
-                          <input
-                              type="checkbox"
-                              id={`doc-${doc.id}`}
-                              checked={selectedDocumentIds.includes(doc.id)}
-                              onChange={() => handleDocumentToggle(doc.id)}
-                              className="document-checkbox"
-                            />
-                            <label htmlFor={`doc-${doc.id}`} className="checkbox-label">
-                              <span className="custom-checkbox">
-                                {selectedDocumentIds.includes(doc.id) ? '✓' : ''}
-                              </span>
-                            </label>
-                          </div>
-                          
-                          <div className="doc-info">
-                            <div className="doc-header">
-                              <span className="doc-icon">{getFileIcon(doc.type)}</span>
-                              <span className="doc-name" title={doc.name}>
-                                {doc.name}
-                              </span>
-                              <span className="doc-type-badge">Admin</span>
-                            </div>
-                            <div className="doc-details">
-                              <small>{formatFileSize(doc.size)}</small>
-                              <small>by {doc.uploaded_by || 'admin'}</small>
-                              <small>{formatDate(doc.upload_date)}</small>
-                            </div>
-                          </div>
-                          {isAdmin() && (
-                            <button
-                              className="delete-doc-btn"
-                              onClick={(e) => handleDeleteDocument(doc.id, e)}
-                              title="Delete admin document (Admin only)"
-                              aria-label="Delete admin document"
-                            >
-                              🗑️
-                            </button>
-                          )}
-                          {!isAdmin() && (
-                            <div className="read-only-indicator" title="Read-only access">
-                              👁️
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-
               {/* Chat History Section */}
               {sidebarSection !== 'documents' && (
                 <div className="chat-history">
@@ -567,55 +274,24 @@ const Sidebar = ({
                   </div>
                 </div>
               )}
-            </div>
+              </div>
 
-            <div className="sidebar-footer">
-              <div className="theme-toggle">
-                <span>Theme</span>
-                <span className="theme-icon">🌙</span>
-              </div>
-              <div className="upgrade-plan">
-                <span className="star-icon">⭐</span>
-                Upgrade Plan
-              </div>
-            </div>
+            {/* Document Manager Modal - Only for admins */}
+            {showDocumentManager && isAdmin() && (
+              <DocumentManager
+                onDocumentSelect={() => {}} // No longer needed for selection
+                selectedDocumentIds={[]} // No longer tracking selections here
+                onClose={() => setShowDocumentManager(false)}
+                isAdmin={isAdmin()}
+              />
+            )}
           </>
         )}
 
-        {/* Collapsed Sidebar Icons */}
-        {collapsed && !isMobile && (
-          <div className="collapsed-icons">
-            <div
-              className={`collapsed-icon ${currentView === 'home' ? 'active' : ''}`}
-              onClick={() => setCurrentView('home')}
-              title="Home"
-            >
-              🏠
-            </div>
-            <div
-              className="collapsed-icon"
-              onClick={handleNewChat}
-              title="New Chat"
-            >
-              💬
-            </div>
-            <div
-              className={`collapsed-icon ${sidebarSection === 'documents' ? 'active' : ''}`}
-              onClick={() => {
-                setSidebarSection('documents');
-                setCollapsed(false);
-              }}
-              title="Admin Documents"
-            >
-              📄
-            </div>
-          </div>
-        )}
-
-        {/* Drag Handle */}
+        {/* Resize handle */}
         {!collapsed && !isMobile && (
-          <div 
-            className="drag-handle"
+          <div
+            className="resize-handle"
             onMouseDown={handleMouseDown}
             style={{ cursor: isDragging ? 'col-resize' : 'col-resize' }}
           />
@@ -626,4 +302,3 @@ const Sidebar = ({
 };
 
 export default Sidebar;
-

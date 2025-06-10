@@ -12,6 +12,9 @@ const ChatArea = ({
   currentSessionId,
   setCurrentSessionId,
   selectedDocumentIds,
+  setSelectedDocumentIds,
+  selectedFolderIds,
+  setSelectedFolderIds, // Add this prop
 }) => {
   const { user, isAdmin } = useAuth();
   const [inputMessage, setInputMessage] = useState('');
@@ -22,8 +25,16 @@ const ChatArea = ({
   const [imagePreview, setImagePreview] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [documentAction, setDocumentAction] = useState('chat');
-  // Document preview states (simple icon display)
   const [selectedDocument, setSelectedDocument] = useState(null);
+  
+  // Knowledge Base Selection State
+  const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
+  const [documents, setDocuments] = useState([]);
+  const [folders, setFolders] = useState([]);
+  const [currentFolder, setCurrentFolder] = useState(null);
+  const [folderPath, setFolderPath] = useState([]);
+  const [isLoadingKB, setIsLoadingKB] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -36,6 +47,148 @@ const ChatArea = ({
     { id: 'meta-llama/llama-4-scout', name: 'Llama 4 Scout (Vision)', supportsImages: true },
   ];
 
+  // Fetch knowledge base data
+  const fetchKnowledgeBase = async () => {
+    setIsLoadingKB(true);
+    try {
+      const response = await axios.get(`http://localhost:8000/folders-with-documents${currentFolder ? `?folder=${currentFolder}` : ''}`);
+      if (response.data.folders && response.data.documents) {
+        setDocuments(response.data.documents || []);
+        setFolders(response.data.folders || []);
+      } else {
+        setDocuments(response.data.documents || []);
+        setFolders([]);
+      }
+    } catch (error) {
+      console.error('Error fetching knowledge base:', error);
+      setDocuments([]);
+      setFolders([]);
+    } finally {
+      setIsLoadingKB(false);
+    }
+  };
+
+  // Load knowledge base when popup opens or folder changes
+  useEffect(() => {
+    if (showKnowledgeBase) {
+      fetchKnowledgeBase();
+    }
+  }, [showKnowledgeBase, currentFolder]);
+
+  // Knowledge base navigation
+  const navigateToFolder = (folderId, folderName) => {
+    setCurrentFolder(folderId);
+    if (folderId) {
+      setFolderPath([...folderPath, { id: folderId, name: folderName }]);
+    }
+  };
+
+  const navigateToRoot = () => {
+    setCurrentFolder(null);
+    setFolderPath([]);
+  };
+
+  const navigateToBreadcrumb = (index) => {
+    const newPath = folderPath.slice(0, index + 1);
+    setFolderPath(newPath);
+    setCurrentFolder(newPath[newPath.length - 1]?.id || null);
+  };
+
+  // Document and folder selection
+  const handleDocumentToggle = (documentId) => {
+    setSelectedDocumentIds(prev => {
+      if (prev.includes(documentId)) {
+        return prev.filter(id => id !== documentId);
+      } else {
+        return [...prev, documentId];
+      }
+    });
+  };
+
+  const handleFolderToggle = (folderId) => {
+    setSelectedFolderIds(prev => {
+      if (prev.includes(folderId)) {
+        return prev.filter(id => id !== folderId);
+      } else {
+        return [...prev, folderId];
+      }
+    });
+  };
+
+  // Select all documents in current view
+  const handleSelectAllDocuments = () => {
+    const allCurrentDocIds = filteredDocuments.map(doc => doc.id);
+    const allSelected = allCurrentDocIds.every(id => selectedDocumentIds.includes(id));
+    
+    if (allSelected) {
+      setSelectedDocumentIds(prev => prev.filter(id => !allCurrentDocIds.includes(id)));
+    } else {
+      setSelectedDocumentIds(prev => [...new Set([...prev, ...allCurrentDocIds])]);
+    }
+  };
+
+  // Select all folders in current view
+  const handleSelectAllFolders = () => {
+    const allCurrentFolderIds = filteredFolders.map(folder => folder.id);
+    const allSelected = allCurrentFolderIds.every(id => selectedFolderIds.includes(id));
+    
+    if (allSelected) {
+      setSelectedFolderIds(prev => prev.filter(id => !allCurrentFolderIds.includes(id)));
+    } else {
+      setSelectedFolderIds(prev => [...new Set([...prev, ...allCurrentFolderIds])]);
+    }
+  };
+
+  // Select/Deselect all items (both docs and folders)
+  const handleSelectAll = () => {
+    const allDocIds = filteredDocuments.map(doc => doc.id);
+    const allFolderIds = filteredFolders.map(folder => folder.id);
+    const allSelected = 
+      allDocIds.every(id => selectedDocumentIds.includes(id)) &&
+      allFolderIds.every(id => selectedFolderIds.includes(id));
+    
+    if (allSelected) {
+      setSelectedDocumentIds(prev => prev.filter(id => !allDocIds.includes(id)));
+      setSelectedFolderIds(prev => prev.filter(id => !allFolderIds.includes(id)));
+    } else {
+      setSelectedDocumentIds(prev => [...new Set([...prev, ...allDocIds])]);
+      setSelectedFolderIds(prev => [...new Set([...prev, ...allFolderIds])]);
+    }
+  };
+
+  // Clear all selections
+  const handleDeselectAll = () => {
+    setSelectedDocumentIds([]);
+    setSelectedFolderIds([]);
+  };
+
+  // Filter documents and folders based on search
+  const filteredDocuments = documents.filter(doc =>
+    doc.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredFolders = folders.filter(folder =>
+    folder.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Format file size
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  // Get file icon
+  const getFileIcon = (fileType) => {
+    if (fileType.includes('pdf')) return '📄';
+    if (fileType.includes('word') || fileType.includes('document')) return '📝';
+    if (fileType.includes('text')) return '📄';
+    return '📁';
+  };
+
+  // Rest of your existing useEffect and function code remains the same...
   useEffect(() => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -85,6 +238,7 @@ const ChatArea = ({
     scrollToBottom();
   }, [messages]);
 
+  // Keep all your existing functions (fileToBase64, handleSendMessage, etc.)
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -100,13 +254,11 @@ const ChatArea = ({
   const handleSendMessage = async () => {
     const message = inputMessage.trim();
     
-    // Allow sending if there's a message, image, or document
     if (!message && !selectedImage && !selectedDocument) return;
     if (isLoading) return;
 
     let userMessageContent = message;
     
-    // If only document is uploaded without text
     if (selectedDocument && !message) {
       userMessageContent = documentAction === 'summarize' 
         ? `📄 Requested summarization of: ${selectedDocument.filename}`
@@ -127,10 +279,11 @@ const ChatArea = ({
 
     try {
       const requestData = {
-        message: message, // Can be empty if only document is uploaded
+        message: message,
         model: selectedModel,
         session_id: currentSessionId,
         selected_document_ids: selectedDocumentIds,
+        selected_folder_ids: selectedFolderIds,
         action_type: documentAction,
       };
 
@@ -143,7 +296,6 @@ const ChatArea = ({
         requestData.image_data = base64Image;
       }
 
-      // Add document data if document is selected
       if (selectedDocument) {
         requestData.document_data = selectedDocument.base64Data;
         requestData.document_filename = selectedDocument.filename;
@@ -158,6 +310,7 @@ const ChatArea = ({
       const botMessage = {
         role: 'assistant',
         content: response.data.response,
+        references: response.data.references || [],
       };
 
       setMessages((prev) => [...prev, botMessage]);
@@ -198,6 +351,7 @@ const ChatArea = ({
     }
   };
 
+  // Keep all your other existing functions...
   const handleNewChat = () => {
     setMessages([]);
     setCurrentSessionId(null);
@@ -264,10 +418,8 @@ const ChatArea = ({
     setIsUploading(true);
 
     try {
-      // Convert file to base64
       const base64Data = await fileToBase64(file);
       
-      // Set document for preview (simple icon display)
       setSelectedDocument({
         base64Data: base64Data,
         filename: file.name,
@@ -323,21 +475,6 @@ const ChatArea = ({
     setSelectedDocument(null);
   };
 
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const getFileIcon = (fileType) => {
-    if (fileType.includes('pdf')) return '📄';
-    if (fileType.includes('word') || fileType.includes('document')) return '📝';
-    if (fileType.includes('text')) return '📄';
-    return '📁';
-  };
-
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (showFileDropdown && !event.target.closest('.attach-container')) {
@@ -361,6 +498,7 @@ const ChatArea = ({
   };
 
   const currentModel = models.find((m) => m.id === selectedModel);
+  const totalSelectedItems = (selectedDocumentIds?.length || 0) + (selectedFolderIds?.length || 0);
 
   return (
     <div className="chat-area">
@@ -373,6 +511,18 @@ const ChatArea = ({
           {currentModel?.supportsImages && <span className="image-support-badge">📷 Image Analysis</span>}
         </div>
         <div className="header-controls">
+          {/* NEW: Knowledge Base Selection Button */}
+          <button
+            className={`knowledge-base-btn ${totalSelectedItems > 0 ? 'active' : ''}`}
+            onClick={() => setShowKnowledgeBase(true)}
+            title="Select Knowledge Base"
+          >
+            🔍 Select Knowledge Base
+            {totalSelectedItems > 0 && (
+              <span className="selection-count">({totalSelectedItems})</span>
+            )}
+          </button>
+          
           <div className="model-dropdown">
             <select
               value={selectedModel}
@@ -400,7 +550,172 @@ const ChatArea = ({
         </div>
       </div>
 
-      {/* Upload Progress Bar */}
+      {/* Knowledge Base Selection Modal */}
+      {showKnowledgeBase && (
+        <div className="knowledge-base-modal-overlay" onClick={() => setShowKnowledgeBase(false)}>
+          <div className="knowledge-base-modal" onClick={e => e.stopPropagation()}>
+            <div className="knowledge-base-header">
+              <h3>📚 Select Knowledge Base</h3>
+              <button 
+                className="close-modal-btn"
+                onClick={() => setShowKnowledgeBase(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="knowledge-base-controls">
+              <div className="search-bar">
+                <input
+                  type="text"
+                  placeholder="Search documents and folders..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="search-input"
+                />
+                <span className="search-icon">🔍</span>
+              </div>
+
+              <div className="selection-controls">
+                <button
+                  className="select-all-btn"
+                  onClick={handleSelectAll}
+                  disabled={isLoadingKB}
+                >
+                  ☑️ Select All
+                </button>
+                <button
+                  className="deselect-all-btn"
+                  onClick={handleDeselectAll}
+                  disabled={isLoadingKB}
+                >
+                  ☐ Deselect All
+                </button>
+                <div className="selection-info">
+                  Selected: {totalSelectedItems} item(s)
+                </div>
+              </div>
+            </div>
+
+            {/* Breadcrumb Navigation */}
+            <div className="breadcrumb">
+              <button 
+                className={`breadcrumb-item ${!currentFolder ? 'active' : ''}`}
+                onClick={navigateToRoot}
+              >
+                📁 Root
+              </button>
+              {folderPath.map((folder, index) => (
+                <React.Fragment key={folder.id}>
+                  <span className="breadcrumb-separator">{'>'}</span>
+                  <button 
+                    className={`breadcrumb-item ${index === folderPath.length - 1 ? 'active' : ''}`}
+                    onClick={() => navigateToBreadcrumb(index)}
+                  >
+                    📁 {folder.name}
+                  </button>
+                </React.Fragment>
+              ))}
+            </div>
+
+            <div className="knowledge-base-content">
+              {isLoadingKB ? (
+                <div className="loading-state">
+                  <div className="loading-spinner"></div>
+                  <p>Loading knowledge base...</p>
+                </div>
+              ) : (
+                <div className="items-list">
+                  {/* Folders */}
+                  {filteredFolders.map(folder => (
+                    <div key={folder.id} className="folder-item">
+                      <div className="item-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={selectedFolderIds.includes(folder.id)}
+                          onChange={() => handleFolderToggle(folder.id)}
+                          className="folder-checkbox"
+                        />
+                      </div>
+                      <div 
+                        className="folder-info"
+                        onDoubleClick={() => navigateToFolder(folder.id, folder.name)}
+                      >
+                        <span className="folder-icon">📁</span>
+                        <span className="folder-name">{folder.name}</span>
+                        <span className="item-count">({folder.item_count || 0} items)</span>
+                      </div>
+                      <button
+                        className="open-folder-btn"
+                        onClick={() => navigateToFolder(folder.id, folder.name)}
+                        title="Open folder"
+                      >
+                        📂
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Documents */}
+                  {filteredDocuments.map(doc => (
+                    <div key={doc.id} className="document-item">
+                      <div className="item-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={selectedDocumentIds.includes(doc.id)}
+                          onChange={() => handleDocumentToggle(doc.id)}
+                          className="document-checkbox"
+                        />
+                      </div>
+                      <div className="doc-info">
+                        <div className="doc-header">
+                          <span className="doc-icon">{getFileIcon(doc.type)}</span>
+                          <span className="doc-name" title={doc.name}>{doc.name}</span>
+                        </div>
+                        <div className="doc-details">
+                          <small>{formatFileSize(doc.size)}</small>
+                          <small>Modified: {new Date(doc.upload_date).toLocaleDateString()}</small>
+                          <small>Type: {doc.type}</small>
+                          {doc.folder_path && <small>Path: {doc.folder_path}</small>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {filteredDocuments.length === 0 && filteredFolders.length === 0 && !isLoadingKB && (
+                    <div className="no-items">
+                      {searchQuery ? (
+                        <>
+                          <p>No items found</p>
+                          <small>Try adjusting your search query</small>
+                        </>
+                      ) : (
+                        <>
+                          <p>{currentFolder ? 'This folder is empty' : 'No documents available'}</p>
+                          <small>Contact an administrator to upload documents</small>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="knowledge-base-footer">
+              <div className="selection-summary">
+                <strong>Selected:</strong> {selectedFolderIds.length} folder(s), {selectedDocumentIds.length} document(s)
+              </div>
+              <button
+                className="apply-selection-btn"
+                onClick={() => setShowKnowledgeBase(false)}
+              >
+                Apply Selection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rest of your existing JSX remains the same... */}
       {isUploading && (
         <div className="upload-progress">
           <div className="progress-bar">
@@ -428,23 +743,28 @@ const ChatArea = ({
               </div>
               
               <div className="rag-status-info">
-                {selectedDocumentIds && selectedDocumentIds.length > 0 ? (
+                {totalSelectedItems > 0 ? (
                   <div className="rag-active">
                     <p>
-                      🔍 <strong>RAG Mode Active:</strong> {selectedDocumentIds.length} document(s) selected
+                      🔍 <strong>RAG Mode Active:</strong> {totalSelectedItems} item(s) selected
                     </p>
-                    <small>I'll answer questions based on the selected documents</small>
+                    <div className="rag-breakdown">
+                      {selectedFolderIds?.length > 0 && (
+                        <small>📁 {selectedFolderIds.length} folder(s)</small>
+                      )}
+                      {selectedDocumentIds?.length > 0 && (
+                        <small>📄 {selectedDocumentIds.length} document(s)</small>
+                      )}
+                    </div>
+                    <small>I'll answer questions based on the selected items</small>
                   </div>
                 ) : (
                   <div className="rag-inactive">
                     <p>
-                      💭 <strong>General Chat Mode:</strong> No documents selected
+                      💭 <strong>General Chat Mode:</strong> No items selected
                     </p>
                     <small>
-                      {isAdmin() 
-                        ? 'Select documents in the sidebar to enable RAG mode' 
-                        : 'Admin documents are available in the sidebar for RAG mode'
-                      }
+                      Click "Select Knowledge Base" to choose documents and folders for RAG mode
                     </small>
                   </div>
                 )}
@@ -455,7 +775,7 @@ const ChatArea = ({
                 <ul>
                   <li>📄 Upload documents with or without questions for analysis</li>
                   <li>📊 Get document summaries using the summarize option</li>
-                  <li>🔍 Use RAG mode with documents from sidebar</li>
+                  <li>🔍 Use RAG mode with folders and documents from knowledge base</li>
                   {currentModel?.supportsImages && <li>🖼️ Upload images for analysis</li>}
                   <li>🎤 Use voice input to dictate messages</li>
                   <li>💬 Have natural conversations</li>
@@ -497,6 +817,24 @@ const ChatArea = ({
                       <div dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }} />
                     )}
                   </div>
+                  {message.references && message.references.length > 0 && (
+                    <div className="message-references">
+                      <h5>📚 Sources:</h5>
+                      {message.references.map((ref, idx) => (
+                        <div key={idx} className="reference-item">
+                          <span className="reference-name">
+                            {ref.folder_path ? `📁 ${ref.folder_path} > ` : ''}
+                            📄 {ref.document_name}
+                          </span>
+                          {ref.similarity_score && (
+                            <span className="similarity-score">
+                              {Math.round(ref.similarity_score * 100)}% match
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -518,7 +856,6 @@ const ChatArea = ({
       </div>
 
       <div className="input-area">
-        {/* Image Preview */}
         {imagePreview && (
           <div className="input-image-preview-container">
             <div className="input-image-preview">
@@ -534,7 +871,6 @@ const ChatArea = ({
           </div>
         )}
 
-        {/* Document Preview (Simple Icon Style) */}
         {selectedDocument && (
           <div className="input-document-preview-container">
             <div className="input-document-preview">
@@ -558,7 +894,6 @@ const ChatArea = ({
           </div>
         )}
         
-
         <div className="input-container">
           <div className="attach-container">
             <button
@@ -629,8 +964,8 @@ const ChatArea = ({
                   ? documentAction === 'summarize'
                     ? 'Document ready for summary (optional: add specific focus)'
                     : `Ask about ${selectedDocument.filename} or leave empty for general analysis`
-                  : selectedDocumentIds && selectedDocumentIds.length > 0
-                    ? 'Ask about the selected documents...'
+                  : totalSelectedItems > 0
+                    ? 'Ask about the selected folders and documents...'
                     : 'Type a message or upload a file...'
             }
             className="message-input"

@@ -15,6 +15,7 @@ const AppContent = () => {
   const [messages, setMessages] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState([]);
+  const [selectedFolderIds, setSelectedFolderIds] = useState([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -58,6 +59,8 @@ const AppContent = () => {
         currentSessionId={currentSessionId}
         selectedDocumentIds={selectedDocumentIds}
         setSelectedDocumentIds={setSelectedDocumentIds}
+        selectedFolderIds={selectedFolderIds} // NEW: Added folder selection props
+        setSelectedFolderIds={setSelectedFolderIds} // NEW: Added folder selection props
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
         width={sidebarWidth}
@@ -90,14 +93,17 @@ const AppContent = () => {
         
         {currentView === 'chat' && (
           <ChatArea
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
-            messages={messages}
-            setMessages={setMessages}
-            currentSessionId={currentSessionId}
-            setCurrentSessionId={setCurrentSessionId}
-            selectedDocumentIds={selectedDocumentIds}
-          />
+          selectedModel={selectedModel}
+          setSelectedModel={setSelectedModel}
+          messages={messages}
+          setMessages={setMessages}
+          currentSessionId={currentSessionId}
+          setCurrentSessionId={setCurrentSessionId}
+          selectedDocumentIds={selectedDocumentIds}
+          setSelectedDocumentIds={setSelectedDocumentIds}
+          selectedFolderIds={selectedFolderIds}
+          setSelectedFolderIds={setSelectedFolderIds}
+        />
         )}
       </div>
     </div>
